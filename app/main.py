@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from app.api.endpoints import users
+from app.api.endpoints import users, notifications
 from app.db.database import engine
 from app.models.base_class import Base
 
@@ -13,6 +13,7 @@ app = FastAPI(
 )
 
 app.include_router(users.router, prefix="/users", tags=["Users"])
+app.include_router(notifications.router, prefix="/notifications", tags=["Notifications"])
 
 @app.get("/ping")
 def health_check():
