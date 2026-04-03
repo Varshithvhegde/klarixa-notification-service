@@ -1,11 +1,14 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 from typing import List
+import math
 
 from app.api.dependencies import get_db
 from app.models.user_preference import UserPreference
+from app.models.notification import Notification
 from app.schemas.user_preference import UserPreferenceCreate, UserPreferenceResponse, UserPreferenceBulkUpdate
+from app.schemas.notification import PaginatedNotificationResponse, NotificationResponse
 
 router = APIRouter()
 
@@ -83,3 +86,31 @@ async def bulk_set_preferences(
     for r in responses:
         await db.refresh(r)
     return responses
+
+
+@router.get("/{user_id}/notifications", response_model=PaginatedNotificationResponse)
+async def get_user_notifications(
+    user_id: str,
+    page: int = Query(default=1, ge=1, description="Page number"),
+    page_size: int = Query(default=10, ge=1, le=100, description="Results per page"),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get notification history for a user."""
+    offset = (page - 1) * page_size
+    count_result = await db.execute(
+        select(func.count()).select_from(Notification).where(Notification.user_id == user_id)
+    )
+    total = count_result.scalar_one()
+    data_result = await db.execute(
+        select(Notification)
+        .where(Notification.user_id == user_id)
+        .order_by(Notification.created_at.desc())
+        .offset(offset)
+        .limit(page_size)
+    )
+    items = data_result.scalars().all()
+    total_pages = math.ceil(total / page_size) if total > 0 else 1
+    return PaginatedNotificationResponse(
+        items=items, total=total, page=page, page_size=page_size,
+        total_pages=total_pages, has_next=page < total_pages, has_prev=page > 1
+    )

@@ -1,6 +1,6 @@
 import pytest
 
-pytestmark = pytest.mark.anyio
+pytestmark = pytest.mark.anyio("asyncio")
 
 # Reset rate limiter between tests
 @pytest.fixture(autouse=True)
@@ -24,13 +24,13 @@ async def test_notification_creation_and_idempotency(client):
         "idempotency_key": "unique_pytest_key_10x"
     }
     res1 = await client.post("/notifications/", json=payload)
-    assert res1.status_code == 200
+    assert res1.status_code == 201
     data = res1.json()[0]
     assert data["message_body"] == "This is a purely automated Pytest payload."
     assert "id" in data
 
     res2 = await client.post("/notifications/", json=payload)
-    assert res2.status_code == 200
+    assert res2.status_code == 201
     assert res1.json()[0]["id"] == res2.json()[0]["id"]
 
 async def test_user_notification_history(client):
@@ -39,7 +39,7 @@ async def test_user_notification_history(client):
     await client.post("/notifications/", json={"user_id": user_id, "channels": ["push"], "message_body": "Message 1", "idempotency_key": "hist1"})
     await client.post("/notifications/", json={"user_id": user_id, "channels": ["push"], "message_body": "Message 2", "idempotency_key": "hist2"})
 
-    res = await client.get(f"/notifications/user/{user_id}")
+    res = await client.get(f"/users/{user_id}/notifications")
     assert res.status_code == 200
     data = res.json()
     assert "items" in data
@@ -54,7 +54,7 @@ async def test_pagination_params(client):
     for i in range(5):
         await client.post("/notifications/", json={"user_id": user_id, "channels": ["email"], "message_body": f"Msg {i}", "idempotency_key": f"pg_key_{i}"})
 
-    res = await client.get(f"/notifications/user/{user_id}?page=1&page_size=2")
+    res = await client.get(f"/users/{user_id}/notifications?page=1&page_size=2")
     assert res.status_code == 200
     data = res.json()
     assert len(data["items"]) == 2
@@ -63,7 +63,7 @@ async def test_pagination_params(client):
     assert data["has_next"] == True
     assert data["has_prev"] == False
 
-    res2 = await client.get(f"/notifications/user/{user_id}?page=2&page_size=2")
+    res2 = await client.get(f"/users/{user_id}/notifications?page=2&page_size=2")
     data2 = res2.json()
     assert data2["has_prev"] == True
     assert data2["has_next"] == True

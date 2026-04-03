@@ -50,7 +50,7 @@ The system uses **PostgreSQL (AsyncPG)** for persistence.
 | `channel` | Enum | `email`, `sms`, or `push`. |
 | `priority` | Enum | Determines position in the processing queue. |
 | `message_body` | Text | Rendered content after Jinja2 substitution. |
-| `status` | Enum | `pending` -> `sent` OR `failed`. |
+| `status` | Enum | `pending` -> `delivered` OR `failed`. |
 | `idempotency_key`| String | Prevents double-firing for identical incoming requests. |
 | `retry_count` | Integer | Tracks recovery attempts for transient provider failures. |
 
@@ -64,7 +64,7 @@ Enables decoupled message management. Changes here reflect globally without appl
 Notipy assumes that downstream providers (Twilio/SendGrid) will occasionally fail.
 
 1.  **Exponential Backoff**: When a provider returns a 5xx or network error, the worker increments `retry_count`.
-2.  **State Persistence**: Before any retry, the state is persisted to the DB. If the server crashes, the `on_startup` routine sweeps the database for `PENDING` items and re-enqueues them.
+2.  **State Persistence**: Before any retry, the state is persisted to the DB. This ensures that even if a worker crashes mid-processing, the notification retains its last known state (`PENDING` with an error message) for debugging. Note: In the current single-process implementation, in-flight queue items are lost on crash. For production use, see the scaling section below on transitioning to a durable message broker.
 3.  **Dead Letter Logic**: After 3 (configurable) failed attempts, the status is marked as `FAILED`, and a Webhook event is fired with the error payload.
 
 ---

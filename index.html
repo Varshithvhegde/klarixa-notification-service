@@ -938,7 +938,7 @@
     try {
       const uid = document.getElementById('h-user-id').value.trim();
       const ps = document.getElementById('h-page-size').value;
-      const data = await api(`${API}/notifications/user/${uid}?page=${page}&page_size=${ps}`);
+      const data = await api(`${API}/users/${uid}/notifications?page=${page}&page_size=${ps}`);
 
       if (data.total === 0) {
         tbody.innerHTML = '<tr><td colspan="6" class="empty"><div class="empty-icon">◎</div>No records for this user.</td></tr>';
@@ -1059,9 +1059,11 @@
     const uid = document.getElementById('p-user-id').value.trim();
     try {
       const data = await api(`${API}/users/${uid}/preferences`);
-      document.getElementById('p-email').checked = data.email_enabled ?? true;
-      document.getElementById('p-sms').checked = data.sms_enabled ?? true;
-      document.getElementById('p-push').checked = data.push_enabled ?? true;
+      const prefs = {};
+      data.forEach(p => { prefs[p.channel] = p.is_opted_in; });
+      document.getElementById('p-email').checked = prefs.email ?? true;
+      document.getElementById('p-sms').checked = prefs.sms ?? true;
+      document.getElementById('p-push').checked = prefs.push ?? true;
       toast('Preferences loaded.');
     } catch (e) {
       toast(e.message, true);

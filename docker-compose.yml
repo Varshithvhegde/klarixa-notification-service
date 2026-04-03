@@ -1,18 +1,35 @@
 version: '3.8'
 
 services:
+  db:
+    image: postgres:16-alpine
+    container_name: notipy_postgres
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=notipy_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   notification_service:
     build: .
     container_name: notipy_notification_service
     ports:
       - "8000:8000"
     environment:
-      # These flags allow you to easily toggle out sqlite databases toward postgres globally right here!
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/notipy_db
       - ENVIRONMENT=production
+    depends_on:
+      db:
+        condition: service_healthy
     restart: unless-stopped
-    volumes:
-      # Saves the sqlite database instances preventing data loss dynamically when standard containers wipe
-      - notification_data:/app/data
 
 volumes:
-  notification_data:
+  postgres_data:

@@ -8,13 +8,27 @@ setup_logging()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Import engine lazily so test patches are respected
-    from app.db.database import engine
+    # Import engine lazily so test patches represent DB state
+    from app.db.database import engine, SessionLocal
     from app.models.base_class import Base
+    from app.models.notification import Notification, NotificationStatus
+    from sqlalchemy import select
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         
+    # Start the worker queue
     await notification_queue.start(workers=2)
+
+    # RECOVERY: Re-enqueue any PENDING or in-flight notifications from previous runs
+    async with SessionLocal() as db:
+        # In a real system, we'd also check 'sent' if we don't have a delivery confirmation yet
+        res = await db.execute(select(Notification).where(Notification.status == NotificationStatus.PENDING))
+        stale_notifications = res.scalars().all()
+        for sn in stale_notifications:
+             # We put them back in the queue
+             await notification_queue.enqueue(sn.id, priority=sn.priority.value)
+    
     yield
     await notification_queue.stop()
 

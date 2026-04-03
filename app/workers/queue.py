@@ -3,6 +3,7 @@ import logging
 from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from jinja2 import Template
 
 from app.db.database import SessionLocal
 from app.models.notification import Notification, NotificationStatus
@@ -62,22 +63,29 @@ class NotificationQueue:
     def _render_template(self, body: str, variables_dict: dict) -> str:
         if not variables_dict or not body:
             return body
-        result = body
-        for k, v in variables_dict.items():
-            result = result.replace(f"{{{{{k}}}}}", str(v))
-        return result
+        template = Template(body)
+        return template.render(**variables_dict)
 
     async def _process(self, notification_id: int, template_vars: dict, attempt: int):
         async with SessionLocal() as db:
-            # Fetch notification
-            result = await db.execute(
-                select(Notification).where(Notification.id == notification_id)
-            )
-            noti = result.scalars().first()
+            # 1. Fetch notification (with small safety retry for DB visibility)
+            noti = None
+            for _ in range(3):
+                result = await db.execute(
+                    select(Notification).where(Notification.id == notification_id)
+                )
+                noti = result.scalars().first()
+                if noti: break
+                await asyncio.sleep(0.5)
+
             if not noti:
+                logger.error(f"Worker could not find notification ID {notification_id}. Swallowing task.")
                 return
 
-            # Check user preferences
+            if noti.status in [NotificationStatus.DELIVERED, NotificationStatus.FAILED]:
+                return
+
+            # 2. Check user preferences
             pref_result = await db.execute(
                 select(UserPreference).where(
                     UserPreference.user_id == noti.user_id,
@@ -88,52 +96,56 @@ class NotificationQueue:
 
             if pref and not pref.is_opted_in:
                 logger.info(f"[{noti.channel.upper()}] User {noti.user_id} opted out. Skipping.")
+                noti.status = NotificationStatus.FAILED
+                noti.error_message = "User opted out of this channel"
+                await db.commit()
+                await fire_webhooks(noti.id, noti.user_id, "failed", noti.channel)
                 return
 
             channel = noti.channel
             rendered_body = self._render_template(noti.message_body, template_vars)
 
             try:
+                # Mark as SENT (Handover to provider)
+                # Re-reading template might have rendered it, save it
+                noti.message_body = rendered_body
+                noti.status = NotificationStatus.SENT
+                await db.commit()
+                # Fire the "sent" webhook event
+                await fire_webhooks(noti.id, noti.user_id, "sent", channel)
+
+                # Call Provider
                 provider = get_provider(channel)
                 await provider.send(user_id=noti.user_id, body=rendered_body)
 
-                # Mark success — re-fetch inside same session
-                noti.status = NotificationStatus.SENT
+                # Mark final success
+                noti.status = NotificationStatus.DELIVERED
                 noti.sent_at = datetime.now(timezone.utc)
                 noti.retry_count = attempt - 1
-                noti.message_body = rendered_body
                 await db.commit()
-
-                # Fire registered webhooks asynchronously
-                await fire_webhooks(noti.id, noti.user_id, "sent", channel)
-                logger.info(f"[{channel.upper()}] Delivered notification -> user={noti.user_id} on attempt {attempt}")
+                # Fire "delivered" event (subscribers to 'sent' might miss this, but it's more accurate)
+                await fire_webhooks(noti.id, noti.user_id, "delivered", channel)
+                
+                logger.info(f"[{channel.upper()}] Delivered notification -> user={noti.user_id}")
 
             except Exception as e:
                 error_msg = str(e)
                 logger.warning(f"Failed to deliver: {error_msg} (Attempt {attempt})")
 
-                if attempt < 3:  # MAX_RETRIES
+                if attempt < 3: 
                     delay = 1.0 * (2 ** (attempt - 1))
+                    noti.status = NotificationStatus.PENDING # Revert for retry 
                     noti.retry_count = attempt
                     noti.error_message = error_msg
-                    noti.message_body = rendered_body
                     await db.commit()
 
                     await asyncio.sleep(delay)
-                    await self.enqueue(
-                        notification_id,
-                        priority=noti.priority.value,
-                        template_vars=template_vars,
-                        attempt=attempt + 1
-                    )
+                    await self.enqueue(notification_id, priority=noti.priority.value, template_vars=template_vars, attempt=attempt + 1)
                 else:
                     noti.status = NotificationStatus.FAILED
                     noti.error_message = error_msg
                     noti.retry_count = attempt
-                    noti.message_body = rendered_body
                     await db.commit()
-
-                    # Fire failure webhooks
                     await fire_webhooks(noti.id, noti.user_id, "failed", channel)
 
 notification_queue = NotificationQueue()

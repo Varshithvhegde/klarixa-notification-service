@@ -236,15 +236,17 @@ def test_analytics():
     
     table = Table(title="Notification Throughput by Channel")
     table.add_column("Channel", style="magenta")
-    table.add_column("Sent", style="green")
+    table.add_column("Sent", style="cyan")
+    table.add_column("Delivered", style="green")
     table.add_column("Failed", style="red")
     table.add_column("Pending", style="yellow")
-    table.add_column("Total Load", style="bold cyan")
+    table.add_column("Total Load", style="bold white")
     
     for ch in data["by_channel"]:
         table.add_row(
             ch["channel"].upper(),
-            str(ch["sent"]),
+            str(ch.get("sent", 0)),
+            str(ch.get("delivered", 0)),
             str(ch["failed"]),
             str(ch["pending"]),
             str(ch["total"])

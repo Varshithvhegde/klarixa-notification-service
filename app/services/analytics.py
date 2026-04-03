@@ -52,7 +52,7 @@ async def get_analytics_stats(
         status_name = status_val.value if hasattr(status_val, 'value') else str(status_val)
         
         if channel not in channel_map:
-            channel_map[channel] = {"sent": 0, "failed": 0, "pending": 0}
+            channel_map[channel] = {"sent": 0, "delivered": 0, "failed": 0, "pending": 0}
             
         channel_map[channel][status_name] = channel_map[channel].get(status_name, 0) + count
         status_totals[status_name] = status_totals.get(status_name, 0) + count
@@ -62,6 +62,7 @@ async def get_analytics_stats(
         by_channel.append(ChannelStats(
             channel=ch,
             sent=stats.get("sent", 0),
+            delivered=stats.get("delivered", 0),
             failed=stats.get("failed", 0),
             pending=stats.get("pending", 0),
             total=sum(stats.values())

@@ -3,7 +3,7 @@ from httpx import AsyncClient
 from app.models.webhook import Webhook
 from sqlalchemy import select
 
-@pytest.mark.anyio
+pytestmark = pytest.mark.anyio("asyncio")
 async def test_webhook_registration(client: AsyncClient, db_session):
     """Test registering a webhook."""
     payload = {

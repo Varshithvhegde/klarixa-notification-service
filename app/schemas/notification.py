@@ -45,6 +45,7 @@ class PaginatedNotificationResponse(BaseModel):
 class ChannelStats(BaseModel):
     channel: str
     sent: int
+    delivered: int = 0
     failed: int
     pending: int
     total: int
