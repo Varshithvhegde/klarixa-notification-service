@@ -11,7 +11,9 @@ class EmailProvider:
     name = "email"
 
     async def send(self, user_id: str, body: str, **kwargs) -> ProviderResult:
-        await asyncio.sleep(0.05)  # Simulate network
+        await asyncio.sleep(0.05)  
+        if random.random() < 0.2:
+            raise RuntimeError("Email provider: SMTP timeout")
         return ProviderResult(success=True, provider_message_id=f"email-mock-{random.randint(100000, 999999)}")
 
 class SMSProvider:
@@ -19,6 +21,8 @@ class SMSProvider:
 
     async def send(self, user_id: str, body: str, **kwargs) -> ProviderResult:
         await asyncio.sleep(0.03)
+        if random.random() < 0.2:
+            raise RuntimeError("SMS provider: carrier rejected message")
         return ProviderResult(success=True, provider_message_id=f"sms-mock-{random.randint(100000, 999999)}")
 
 class PushProvider:
@@ -26,6 +30,8 @@ class PushProvider:
 
     async def send(self, user_id: str, body: str, **kwargs) -> ProviderResult:
         await asyncio.sleep(0.02)
+        if random.random() < 0.2:
+            raise RuntimeError("Push provider: device token expired")
         return ProviderResult(success=True, provider_message_id=f"push-mock-{random.randint(100000, 999999)}")
 
 _providers = {

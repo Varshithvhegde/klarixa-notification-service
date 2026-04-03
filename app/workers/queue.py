@@ -17,9 +17,9 @@ class NotificationQueue:
         self._workers: list[asyncio.Task] = []
         self._running = False
 
-    async def enqueue(self, notification_id: int, priority: str = "normal", template_vars: dict = None):
+    async def enqueue(self, notification_id: int, priority: str = "normal", template_vars: dict = None, attempt: int = 1):
         prio_val = PRIORITY_MAP.get(priority.lower(), 2)
-        await self._queue.put((prio_val, notification_id, template_vars))
+        await self._queue.put((prio_val, notification_id, template_vars, attempt))
 
     async def start(self, workers: int = 2):
         self._running = True
@@ -38,10 +38,10 @@ class NotificationQueue:
     async def _worker(self, worker_id: int):
         while self._running:
             try:
-                priority, notification_id, template_vars = await asyncio.wait_for(
+                priority, notification_id, template_vars, attempt = await asyncio.wait_for(
                     self._queue.get(), timeout=1.0
                 )
-                await self._process(notification_id, template_vars)
+                await self._process(notification_id, template_vars, attempt)
                 self._queue.task_done()
             except asyncio.TimeoutError:
                 continue
@@ -58,7 +58,7 @@ class NotificationQueue:
             result = result.replace(f"{{{{{k}}}}}", str(v))
         return result
 
-    async def _process(self, notification_id: int, template_vars: dict):
+    async def _process(self, notification_id: int, template_vars: dict, attempt: int):
         from app.db.database import SessionLocal
         from app.models.notification import Notification, NotificationStatus
         from app.models.user_preference import UserPreference
@@ -110,26 +110,48 @@ class NotificationQueue:
                     noti = db.query(Notification).filter(Notification.id == notification_id).first()
                     if noti:
                         noti.status = NotificationStatus.SENT
+                        noti.sent_at = datetime.now(timezone.utc)
+                        noti.retry_count = attempt - 1
                         db.commit()
                 finally:
                     db.close()
 
             await asyncio.to_thread(mark_success)
-            print(f"[{channel.upper()}] Delivered notification -> user={notification.user_id}")
+            print(f"[{channel.upper()}] Delivered notification -> user={notification.user_id} on attempt {attempt}")
             
         except Exception as e:
             error_msg = str(e)
-            print(f"Failed to deliver: {error_msg}")
-            def mark_failed():
-                db = SessionLocal()
-                try:
-                    noti = db.query(Notification).filter(Notification.id == notification_id).first()
-                    if noti:
-                        noti.status = NotificationStatus.FAILED
-                        db.commit()
-                finally:
-                    db.close()
-                    
-            await asyncio.to_thread(mark_failed)
+            print(f"Failed to deliver: {error_msg} (Attempt {attempt})")
+            
+            if attempt < 3: # MAX_RETRIES
+                delay = 1.0 * (2 ** (attempt - 1))
+                def mark_retry():
+                    db = SessionLocal()
+                    try:
+                        noti = db.query(Notification).filter(Notification.id == notification_id).first()
+                        if noti:
+                            noti.retry_count = attempt
+                            noti.error_message = error_msg
+                            db.commit()
+                    finally:
+                        db.close()
+                
+                await asyncio.to_thread(mark_retry)
+                await asyncio.sleep(delay)
+                await self.enqueue(notification_id, priority=notification.priority.value, template_vars=template_vars, attempt=attempt + 1)
+            else:
+                def mark_failed():
+                    db = SessionLocal()
+                    try:
+                        noti = db.query(Notification).filter(Notification.id == notification_id).first()
+                        if noti:
+                            noti.status = NotificationStatus.FAILED
+                            noti.error_message = error_msg
+                            noti.retry_count = attempt
+                            db.commit()
+                    finally:
+                        db.close()
+                        
+                await asyncio.to_thread(mark_failed)
 
 notification_queue = NotificationQueue()

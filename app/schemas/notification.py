@@ -21,6 +21,9 @@ class NotificationResponse(BaseModel):
     status: NotificationStatus
     message_body: str
     idempotency_key: Optional[str] = None
+    retry_count: int
+    error_message: Optional[str] = None
+    sent_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
 

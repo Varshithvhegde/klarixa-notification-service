@@ -105,6 +105,44 @@ def test_background_worker():
     except requests.exceptions.RequestException as e:
         print(f"[-] Failed background test: {e}")
 
+def test_idempotency_and_retries():
+    print(f"\n--- Testing Step 7: Idempotency & Retries ---")
+    user_id = "user_123"
+    idempotency_key = f"idem_key_{int(time.time())}"
+
+    payload = {
+        "user_id": user_id,
+        "channel": "push",
+        "priority": "normal",
+        "message_body": "Checking idempotency...",
+        "idempotency_key": idempotency_key
+    }
+
+    try:
+        print(f"[*] Request 1 with key '{idempotency_key}'...")
+        res1 = requests.post(f"{BASE_URL}/notifications/", json=payload).json()
+        print(f"[+] Created ID: {res1['id']}")
+
+        print(f"[*] Request 2 with identical key...")
+        res2 = requests.post(f"{BASE_URL}/notifications/", json=payload).json()
+        print(f"[+] Returned ID: {res2['id']}")
+        
+        if res1["id"] == res2["id"]:
+            print("[+] SUCCESS: Idempotency logic intercepted the duplicate request!")
+        else:
+            print("[-] FAILURE: Idempotency check did not catch duplicate.")
+            
+        print("[*] Let's check tracking schema features (delaying 2s explicitly to allow workers/retries)...")
+        time.sleep(2)
+        chk = requests.get(f"{BASE_URL}/notifications/{res1['id']}").json()
+        print(f"[+] Delivery Status: {chk['status']}")
+        print(f"[+] Number of Retries Executed: {chk.get('retry_count', 0)}")
+        if chk.get('error_message'):
+            print(f"[+] Caught Simulated Error: {chk['error_message']}")
+
+    except requests.exceptions.RequestException as e:
+        print(f"[-] Failed test: {e}")
+
 if __name__ == "__main__":
     print("Executing Live API Tests (Ensure server is running on port 8000)")
     try:
@@ -113,6 +151,6 @@ if __name__ == "__main__":
         test_user_preferences()
         test_notifications()
         test_background_worker()
+        test_idempotency_and_retries()
     except requests.exceptions.ConnectionError:
         print("\n[ERROR] Server is not running! Please run: uvicorn app.main:app --reload")
-
