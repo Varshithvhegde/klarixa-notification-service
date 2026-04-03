@@ -47,9 +47,15 @@ The engine starts **2 concurrent worker threads** within the same process under 
 cd notipy_AI_Backend-Assignment
 
 # Setup Virtual Environment
+# Clone and enter directory
+cd notipy_AI_Backend-Assignment
+
+# Setup Virtual Environment
 python -m venv venv
 source venv/Scripts/activate  # On Windows: venv\Scripts\activate
+source venv/Scripts/activate  # On Windows: venv\Scripts\activate
 
+# Install Dependencies
 # Install Dependencies
 pip install -r requirements.txt
 ```
@@ -63,8 +69,111 @@ DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/notipy_db
 
 ### 3. Run the Engine
 ```bash
+```
+
+### 2. Configure Database
+Update the `.env` file with your PostgreSQL credentials:
+```env
+# DATABASE_URL=sqlite+aiosqlite:///./test.db # For SQLite
+DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/notipy_db
+```
+
+### 3. Run the Engine
+```bash
 uvicorn app.main:app --reload --port 8000
 ```
+
+---
+
+## 🐳 Docker Deployment
+
+The project includes a multi-stage `Dockerfile` for easy containerization.
+
+```bash
+# Build the image
+docker build -t notipy-engine .
+
+# Run the container
+docker run -p 8000:8000 \
+  -e DATABASE_URL=postgresql+asyncpg://user:pass@db:5432/db \
+  notipy-engine
+```
+
+---
+
+## 🖥️ Using the Notipy Dashboard
+
+The project features a **Premium Web Dashboard** located at `index.html`. It uses Glassmorphism aesthetics and provides a no-code interface for managing the entire engine.
+
+**To run the UI:**
+1.  Open `index.html` using a local server (e.g., VS Code **Live Server** on port 5500).
+2.  The UI is pre-configured to talk to the backend at `http://127.0.0.1:8000`.
+3.  **Functions**: Use the tabs to dispatch Batch/Single notifications, manage Template Variables, and track Live Telemetry.
+
+---
+
+## 🧪 Testing
+
+### 1. Core Test Suite (Pytest)
+Run the comprehensive async test suite (17+ cases):
+```bash
+python -m pytest tests/ -v
+```
+
+### 2. Live Diagnostics CLI
+Run our custom diagnostic tool for a beautiful, interactive system verify:
+```bash
+python test_api_live.py
+```
+
+---
+
+## 📁 API Reference & Curl Examples
+
+### 1. Send Notification (Single User)
+```bash
+curl -X POST "http://127.0.0.1:8000/notifications/" \
+     -H "Content-Type: application/json" \
+     -d '{
+       "user_id": "cust_123",
+       "channels": ["email", "sms"],
+       "message_body": "Hello {{name}}!",
+       "template_vars": {"name": "Varshith"},
+       "priority": "critical"
+     }'
+```
+
+### 2. Create Template
+```bash
+curl -X POST "http://127.0.0.1:8000/templates/" \
+     -H "Content-Type: application/json" \
+     -d '{
+       "name": "welcome_tpl",
+       "subject": "Welcome!",
+       "body": "Welcome aboard {{user}}!",
+       "allowed_channels": ["email", "push"]
+     }'
+```
+
+### 3. Batch Dispatch
+```bash
+curl -X POST "http://127.0.0.1:8000/notifications/batch" \
+     -H "Content-Type: application/json" \
+     -d '{
+       "notifications": [
+         {"user_id": "u1", "channels": ["email"], "message_body": "User 1 msg"},
+         {"user_id": "u2", "channels": ["sms"], "message_body": "User 2 msg"}
+       ]
+     }'
+```
+
+### 4. Fetch Strategy Stats
+```bash
+curl "http://127.0.0.1:8000/analytics/stats?start=2024-01-01T00:00:00"
+```
+
+---
+
 
 ---
 
