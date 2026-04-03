@@ -67,16 +67,6 @@ Update the `.env` file with your PostgreSQL credentials:
 DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/notipy_db
 ```
 
-### 3. Run the Engine
-```bash
-```
-
-### 2. Configure Database
-Update the `.env` file with your PostgreSQL credentials:
-```env
-# DATABASE_URL=sqlite+aiosqlite:///./test.db # For SQLite
-DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/notipy_db
-```
 
 ### 3. Run the Engine
 ```bash
