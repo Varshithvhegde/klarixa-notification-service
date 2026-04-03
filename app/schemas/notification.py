@@ -12,7 +12,6 @@ class NotificationCreate(BaseModel):
     message_body: str
     idempotency_key: Optional[str] = None
     
-    # We will add variables for templating in Step 6
     # template_vars: Optional[dict] = None
 
 class NotificationResponse(BaseModel):
@@ -23,6 +22,9 @@ class NotificationResponse(BaseModel):
     status: NotificationStatus
     message_body: str
     idempotency_key: Optional[str] = None
+    retry_count: int
+    error_message: Optional[str] = None
+    sent_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
 

@@ -5,12 +5,12 @@ from typing import List
 from app.api.dependencies import get_db
 from app.models.notification import Notification, NotificationStatus
 from app.schemas.notification import NotificationCreate, NotificationResponse
+from app.workers.queue import notification_queue
 
 router = APIRouter()
 
 @router.post("/", response_model=NotificationResponse)
-def create_notification(noti: NotificationCreate, db: Session = Depends(get_db)):
-    # Basic Idempotency check (Step 7 will enhance this, but we get a head start)
+async def create_notification(noti: NotificationCreate, db: Session = Depends(get_db)):
     if noti.idempotency_key:
         existing = db.query(Notification).filter(Notification.idempotency_key == noti.idempotency_key).first()
         if existing:
@@ -29,7 +29,8 @@ def create_notification(noti: NotificationCreate, db: Session = Depends(get_db))
     db.commit()
     db.refresh(db_noti)
     
-    # In Step 4 we will push this to a Background Worker queue here!
+
+    await notification_queue.enqueue(db_noti.id, priority=db_noti.priority.value)
     
     return db_noti
 
