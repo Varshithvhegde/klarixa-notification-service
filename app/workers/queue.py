@@ -112,6 +112,7 @@ class NotificationQueue:
                         noti.status = NotificationStatus.SENT
                         noti.sent_at = datetime.now(timezone.utc)
                         noti.retry_count = attempt - 1
+                        noti.message_body = rendered_body
                         db.commit()
                 finally:
                     db.close()
@@ -132,6 +133,7 @@ class NotificationQueue:
                         if noti:
                             noti.retry_count = attempt
                             noti.error_message = error_msg
+                            noti.message_body = rendered_body
                             db.commit()
                     finally:
                         db.close()
@@ -148,6 +150,7 @@ class NotificationQueue:
                             noti.status = NotificationStatus.FAILED
                             noti.error_message = error_msg
                             noti.retry_count = attempt
+                            noti.message_body = rendered_body
                             db.commit()
                     finally:
                         db.close()
